@@ -216,6 +216,14 @@ void cogerMejores(Poblacion &poblacion) {
     resultadoIndividuo(mejor);
 }
 
+/*
+    Initial population
+    Fitness function
+    Selection
+    Crossover
+    Mutation
+*/
+
 int main(int argc, char *argv[]) {
     if (argc != 1 + 1) {
         cout << "\tUso: " << argv[0] << " [fichero] [tam_poblacion] [prob_cruce] [prob_mut] [selector]" << endl;
@@ -241,11 +249,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-/*
-    Initial population
-    Fitness function
-    Selection
-    Crossover
-    Mutation
-*/
