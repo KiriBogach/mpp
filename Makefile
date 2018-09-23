@@ -4,5 +4,5 @@ all: secuencial.cpp
 clean:
 	rm *.out
 
-run: clean all
-	./secuencial.out $(file)
+run: all
+	time ./secuencial.out $(file)
