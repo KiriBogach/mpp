@@ -2,6 +2,16 @@
 
 c++11
 
+
+
+Esquema de un algoritmo genético:
+    Initial population
+    Fitness function
+    Selection
+    Crossover
+    Mutation
+
+
 */
 
 #include <stdlib.h>
@@ -17,16 +27,18 @@ c++11
 
 using namespace std;
 
-const int GENERACIONES = 10;
+/* DEFINICION DE CONSTANTES */
+const int GENERACIONES = 50;
 const int TAM_POBLACION = 100;
-const float PROB_CRUCE = 0.8;
-const float PROB_MUT = 0.1;
+const float PROB_CRUCE = 0.9;
+const float PROB_MUT = 0.3;
 
+/* DEFINICION DE DATOS */
 typedef struct {
-    int np;  // personas
-    int ns;  // subgrupos
-    int na;  // asignaturas
-    int **matricula;
+    int np;            // personas
+    int ns;            // subgrupos
+    int na;            // asignaturas
+    int **matriculas;  // las asignaturas cursadas por cada alumno
 } Datos;
 
 typedef struct {
@@ -40,6 +52,7 @@ typedef struct {
 
 Datos d;  // global
 
+/* Lectura desde fichero hacia 'd' */
 void leer(Datos *d, char *fichero) {
     ifstream f(fichero);
 
@@ -50,18 +63,49 @@ void leer(Datos *d, char *fichero) {
 
     f >> d->np >> d->ns >> d->na;
 
-    d->matricula = new int *[d->np];
+    d->matriculas = new int *[d->np];
     for (int i = 0; i < d->np; i++) {
-        d->matricula[i] = new int[d->na];
+        d->matriculas[i] = new int[d->na];
     }
 
     for (int i = 0; i < d->np; i++) {
         for (int j = 0; j < d->na; j++) {
-            f >> d->matricula[i][j];
+            f >> d->matriculas[i][j];
         }
     }
 
     f.close();
+}
+
+/* Devuelve un número decimal al azar entre [0, 1] */
+double uniforme() {
+    return rand() % 100 / 100.0;
+}
+
+/*
+ Dado el vector [1, 2, 2, 0] =>
+    La media es 5/4
+    ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
+*/
+double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
+    /*int suma = 0;
+    for (int asignacion : asignaciones) {
+        suma += asignacion;
+    }
+    return suma;*/
+    double media = 0.0;
+    for (int asignacion : asignaciones) {
+        media += asignacion;
+    }
+    media /= d.na;
+
+    float desviacion = 0.0;
+    for (int asignacion : asignaciones) {
+        desviacion += abs(media - asignacion);
+    }
+    desviacion /= d.na;
+
+    return desviacion;
 }
 
 // TODO: los imprimir y tal meterlo en un utils.cpp
@@ -71,7 +115,7 @@ void imprimirDatos() {
     cout << d.na << endl;
     for (int i = 0; i < d.np; i++) {
         for (int j = 0; j < d.na; j++) {
-            cout << d.matricula[i][j] << ' ';
+            cout << d.matriculas[i][j] << ' ';
         }
         cout << endl;
     }
@@ -117,42 +161,7 @@ int maximaDiferencia(vector<int> v) {
     return max - min;
 }
 
-/*
- (1, 2, 2, 0)
- La media es 5/4
- ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
-*/
-double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
-    double media = 0.0;
-    for (int asignacion : asignaciones) {
-        media += asignacion;
-    }
-    media /= d.na;
-
-    float desviacion = 0.0;
-    for (int asignacion : asignaciones) {
-        desviacion += abs(media - asignacion);
-    }
-    desviacion /= d.na;
-
-    return desviacion;
-}
-
-void inicializarPoblacion(Poblacion &poblacion) {
-    for (int i = 0; i < poblacion.individuos.size(); i++) {
-        vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
-        for (int j = 0; j < d.np; j++) {
-            int random = (rand() % d.na);
-            asignaciones.push_back(random);
-        }
-    }
-}
-
-// vector copy
-void crossover() {
-}
-
-vector<int> resultadoIndividuo(Individuo &individuo) {
+vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
 
     for (int subgrupo = 0; subgrupo < d.ns; subgrupo++) {
@@ -167,7 +176,7 @@ vector<int> resultadoIndividuo(Individuo &individuo) {
         for (int alumno = 0; alumno < asignaciones.size(); alumno++) {
             if (subgrupo != asignaciones.at(alumno)) continue;
             for (int m = 0; m < d.na; m++) {
-                alumnosAsignatura.at(m) += d.matricula[alumno][m];
+                alumnosAsignatura.at(m) += d.matriculas[alumno][m];
             }
         }
 
@@ -188,7 +197,62 @@ vector<int> resultadoIndividuo(Individuo &individuo) {
     cout << endl
          << "diff max = ";
     imprimirVector(maximas);
-    cout << endl;
+    cout << endl
+         << endl;
+
+    return maximas;
+}
+
+void imprimirFitness(Individuo &individuo) {
+    vector<int> resultado = imprimirResultadoIndividuo(individuo);
+    individuo.fitness = desviacionTipicaRespectoMedia(resultado);
+}
+void imprimirMedirFitness(Poblacion &poblacion) {
+    for (int i = 0; i < poblacion.individuos.size(); i++) {
+        Individuo &individuo = poblacion.individuos.at(i);
+        imprimirFitness(individuo);
+    }
+}
+
+void inicializarPoblacion(Poblacion &poblacion) {
+    for (int i = 0; i < poblacion.individuos.size(); i++) {
+        vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
+        for (int j = 0; j < d.np; j++) {
+            int random = (rand() % d.ns);
+            asignaciones.push_back(random);
+        }
+    }
+}
+
+vector<int> resultadoIndividuo(Individuo &individuo) {
+    vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
+
+    for (int subgrupo = 0; subgrupo < d.ns; subgrupo++) {
+        vector<int> alumnosAsignatura;  // el nº de alumnos de cada asignatura del subgrupo
+        for (int j = 0; j < d.na; j++) {
+            alumnosAsignatura.push_back(0);
+        }
+
+        vector<int> &asignaciones = individuo.asignaciones;
+
+        for (int alumno = 0; alumno < asignaciones.size(); alumno++) {
+            if (subgrupo != asignaciones.at(alumno)) continue;
+            for (int m = 0; m < d.na; m++) {
+                alumnosAsignatura.at(m) += d.matriculas[alumno][m];
+            }
+        }
+
+        subgrupos.push_back(alumnosAsignatura);
+    }
+
+    vector<int> maximas;
+    for (int asignatura = 0; asignatura < d.na; asignatura++) {
+        vector<int> diferencias;
+        for (vector<int> v : subgrupos) {
+            diferencias.push_back(v.at(asignatura));
+        }
+        maximas.push_back(maximaDiferencia(diferencias));
+    }
 
     return maximas;
 }
@@ -205,47 +269,119 @@ void medirFitness(Poblacion &poblacion) {
     }
 }
 
-bool ordenarPorFitness(Individuo a, Individuo b) { return a.fitness < b.fitness; }
-
-void cogerMejores(Poblacion &poblacion) {
+Individuo cogerMejor(Poblacion &poblacion) {
     vector<Individuo> &individuos = poblacion.individuos;
-    sort(individuos.begin(), individuos.end(), ordenarPorFitness);
-    Individuo &mejor = individuos.at(0);
-    imprimirIndividuo(mejor);
-    cout << endl;
-    resultadoIndividuo(mejor);
+    /* Ordenamos por su fitness */
+    sort(individuos.begin(), individuos.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    return individuos.at(0);  // con el menor fitness
+}
+
+Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
+    const int k = TAM_POBLACION / 10;
+    vector<Individuo> azar;
+    for (int j = 0; j < k; j++) {
+        azar.push_back(poblacion.individuos.at(rand() % TAM_POBLACION));
+    }
+    sort(azar.begin(), azar.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    Individuo mejor = azar.at(0);
+    return mejor;
 }
 
 /*
-    Initial population
-    Fitness function
-    Selection
-    Crossover
-    Mutation
+choose k (the tournament size) individuals from the population at random
+choose the best individual from pool/tournament with probability p
+choose the second best individual with probability p*(1-p)
+choose the third best individual with probability p*((1-p)^2)
 */
+vector<Individuo> seleccionPorTorneo(Poblacion &poblacion) {
+    vector<Individuo> mejores;
+    for (int i = 0; i < TAM_POBLACION; i++) {
+        Individuo mejor = seleccionIndividuoPorTorneo(poblacion);
+        mejores.push_back(mejor);
+        // OJO podemos llegar a seleccionar mejores iguales
+    }
+    return mejores;
+}
+
+Poblacion crossover(Poblacion &poblacion) {
+    Poblacion resultado;
+    vector<Individuo> &individuos = resultado.individuos;
+    int poblacionTotal = 0;
+    while (poblacionTotal < TAM_POBLACION) {
+        int indexPadre = rand() % TAM_POBLACION;
+        int indexMadre = rand() % TAM_POBLACION;
+
+        Individuo &padre = poblacion.individuos.at(indexPadre);
+        Individuo &madre = poblacion.individuos.at(indexMadre);
+
+        if (uniforme() <= PROB_CRUCE) {
+            Individuo hijo;
+            for (int i = 0; i < d.np; i++) {
+                if (uniforme() >= 0.5) {
+                    hijo.asignaciones.push_back(padre.asignaciones.at(i));
+                } else {
+                    hijo.asignaciones.push_back(madre.asignaciones.at(i));
+                }
+            }
+            individuos.at(poblacionTotal++) = hijo;
+        }
+    }
+    return resultado;
+}
+
+void mutation(Poblacion &poblacion) {
+    vector<Individuo> &individuos = poblacion.individuos;
+    for (Individuo individuo : individuos) {
+        if (uniforme() <= PROB_MUT) {
+            int indice = rand() % d.np;
+            individuo.asignaciones.at(indice) = rand() % d.ns;
+        }
+    }
+}
 
 int main(int argc, char *argv[]) {
     if (argc != 1 + 1) {
-        cout << "\tUso: " << argv[0] << " [fichero] [tam_poblacion] [prob_cruce] [prob_mut] [selector]" << endl;
-        cout << "\tSelector: {0 = Ruleta, 1 = Torneo}" << endl;
+        cout << "\tUso: " << argv[0] << " [fichero] " << endl;
         return 1;
     }
     leer(&d, argv[1]);
+
+    srand(time(NULL));
 
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
-    impimirPoblacion(poblacion);
-
-    cogerMejores(poblacion);
-
     //impimirPoblacion(poblacion);
 
-    /*
-    for (int i = 0; i < GENERACIONES; i++) {
+    int iteracion = 0;
+    for (; iteracion < GENERACIONES; iteracion++) {
+        Poblacion nuevaPoblacion;
+        nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
+        poblacion = crossover(nuevaPoblacion);
+        mutation(poblacion);
         medirFitness(poblacion);
-    }*/
+        //impimirPoblacion(poblacion);
+        Individuo mejor = cogerMejor(poblacion);
+        // cout << "ITERACION = " << iteracion << ", fitness = " << mejor.fitness << endl;
+        // imprimirIndividuo(mejor);
+        if (mejor.fitness == 0.0) {
+            break;  // encontramos la solución óptima
+        }
+    }
+
+    if (iteracion < GENERACIONES) {
+        cout << "FIN ANTES DE LAS GENERACIONES" << endl;
+    } else {
+        cout << "TODAS LAS GENERACIONES PASADAS" << endl;
+    }
+
+    cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
+    Individuo mejor = cogerMejor(poblacion);
+    cogerMejor(poblacion);
+    imprimirResultadoIndividuo(mejor);
+    cout << "MEJOR INDIVIDUO -> " << endl;
+    imprimirIndividuo(mejor);
 
     return 0;
 }
