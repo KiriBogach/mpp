@@ -6,7 +6,7 @@ generador: generador.cpp
 
 generar: all generador
 	./generador.out $(np) $(ns) $(na) $(p_matriculacion) > temp.txt
-	./secuencial.out temp.txt
+	/usr/bin/time --format "%E" -a ./secuencial.out temp.txt
 	rm temp.txt
 
 clean:

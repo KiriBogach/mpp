@@ -28,7 +28,7 @@ Esquema de un algoritmo genético:
 using namespace std;
 
 /* DEFINICION DE CONSTANTES */
-const int GENERACIONES = 50;
+const int GENERACIONES = 100;
 const int TAM_POBLACION = 100;
 const float PROB_CRUCE = 0.9;
 const float PROB_MUT = 0.3;
@@ -93,19 +93,22 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
         suma += asignacion;
     }
     return suma;*/
+
+    //int max = 0;
     double media = 0.0;
     for (int asignacion : asignaciones) {
+        //if (asignacion > max) max = asignacion;
         media += asignacion;
     }
     media /= d.na;
 
-    float desviacion = 0.0;
+    double desviacion = 0.0;
     for (int asignacion : asignaciones) {
         desviacion += abs(media - asignacion);
     }
     desviacion /= d.na;
 
-    return desviacion;
+    return desviacion;  // + max;
 }
 
 // TODO: los imprimir y tal meterlo en un utils.cpp
@@ -277,7 +280,7 @@ Individuo cogerMejor(Poblacion &poblacion) {
 }
 
 Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
-    const int k = TAM_POBLACION / 10;
+    const int k = 2;  // Binary tournament selection (k = 2) is most often used.
     vector<Individuo> azar;
     for (int j = 0; j < k; j++) {
         azar.push_back(poblacion.individuos.at(rand() % TAM_POBLACION));
@@ -287,12 +290,6 @@ Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
     return mejor;
 }
 
-/*
-choose k (the tournament size) individuals from the population at random
-choose the best individual from pool/tournament with probability p
-choose the second best individual with probability p*(1-p)
-choose the third best individual with probability p*((1-p)^2)
-*/
 vector<Individuo> seleccionPorTorneo(Poblacion &poblacion) {
     vector<Individuo> mejores;
     for (int i = 0; i < TAM_POBLACION; i++) {
@@ -303,6 +300,7 @@ vector<Individuo> seleccionPorTorneo(Poblacion &poblacion) {
     return mejores;
 }
 
+/* The probability of crossover is the probability that crossover will occur at a particular mating */
 Poblacion crossover(Poblacion &poblacion) {
     Poblacion resultado;
     vector<Individuo> &individuos = resultado.individuos;
@@ -314,6 +312,7 @@ Poblacion crossover(Poblacion &poblacion) {
         Individuo &padre = poblacion.individuos.at(indexPadre);
         Individuo &madre = poblacion.individuos.at(indexMadre);
 
+        /* 50% genes madre y 50% genes padre */
         if (uniforme() <= PROB_CRUCE) {
             Individuo hijo;
             for (int i = 0; i < d.np; i++) {
@@ -363,8 +362,8 @@ int main(int argc, char *argv[]) {
         medirFitness(poblacion);
         //impimirPoblacion(poblacion);
         Individuo mejor = cogerMejor(poblacion);
-        // cout << "ITERACION = " << iteracion << ", fitness = " << mejor.fitness << endl;
-        // imprimirIndividuo(mejor);
+        cout << "ITERACION = " << iteracion << endl;
+        imprimirIndividuo(mejor);
         if (mejor.fitness == 0.0) {
             break;  // encontramos la solución óptima
         }
