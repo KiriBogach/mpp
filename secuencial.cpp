@@ -31,7 +31,7 @@ using namespace std;
 const int GENERACIONES = 100;
 const int TAM_POBLACION = 100;
 const float PROB_CRUCE = 0.9;
-const float PROB_MUT = 0.3;
+const float PROB_MUT = 0.1;
 
 /* DEFINICION DE DATOS */
 typedef struct {
@@ -362,8 +362,8 @@ int main(int argc, char *argv[]) {
         medirFitness(poblacion);
         //impimirPoblacion(poblacion);
         Individuo mejor = cogerMejor(poblacion);
-        cout << "ITERACION = " << iteracion << endl;
-        imprimirIndividuo(mejor);
+        // cout << "ITERACION = " << iteracion << endl;
+        // imprimirIndividuo(mejor);
         if (mejor.fitness == 0.0) {
             break;  // encontramos la solución óptima
         }
