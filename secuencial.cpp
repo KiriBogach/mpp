@@ -14,7 +14,10 @@ Esquema de un algoritmo genético:
 
 */
 
+#include <omp.h>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <time.h>
 #include <algorithm>  // std::sort
 #include <cerrno>
 #include <climits>
@@ -28,8 +31,8 @@ Esquema de un algoritmo genético:
 using namespace std;
 
 /* DEFINICION DE CONSTANTES */
-const int GENERACIONES = 100;
-const int TAM_POBLACION = 100;
+const int GENERACIONES = 500;
+const int TAM_POBLACION = 200;
 const float PROB_CRUCE = 0.9;
 const float PROB_MUT = 0.1;
 
@@ -88,17 +91,23 @@ double uniforme() {
     ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
 */
 double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
-    /*int suma = 0;
+    int suma = 0;
+    int max = 0;
     for (int asignacion : asignaciones) {
+        if (asignacion > max) {
+            max = asignacion;
+        }
         suma += asignacion;
     }
-    return suma;*/
-
-    //int max = 0;
+    return suma * max;
+    /*
+    int max = 0;
     double media = 0.0;
     for (int asignacion : asignaciones) {
-        //if (asignacion > max) max = asignacion;
         media += asignacion;
+        if (asignacion > max) {
+            max = asignacion;
+        }
     }
     media /= d.na;
 
@@ -108,7 +117,8 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
     }
     desviacion /= d.na;
 
-    return desviacion;  // + max;
+    return desviacion + max;
+    */
 }
 
 // TODO: los imprimir y tal meterlo en un utils.cpp
@@ -338,15 +348,7 @@ void mutation(Poblacion &poblacion) {
     }
 }
 
-int main(int argc, char *argv[]) {
-    if (argc != 1 + 1) {
-        cout << "\tUso: " << argv[0] << " [fichero] " << endl;
-        return 1;
-    }
-    leer(&d, argv[1]);
-
-    srand(time(NULL));
-
+void secuencial() {
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
@@ -377,10 +379,92 @@ int main(int argc, char *argv[]) {
 
     cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
     Individuo mejor = cogerMejor(poblacion);
-    cogerMejor(poblacion);
     imprimirResultadoIndividuo(mejor);
     cout << "MEJOR INDIVIDUO -> " << endl;
     imprimirIndividuo(mejor);
+}
+
+void openmp() {
+    vector<Poblacion> poblaciones;
+#pragma omp parallel shared(poblaciones)
+    {
+        Poblacion poblacion;
+
+        inicializarPoblacion(poblacion);
+        medirFitness(poblacion);
+
+        int iteracion = 0;
+        for (; iteracion < GENERACIONES / omp_get_num_threads(); iteracion++) {
+            Poblacion nuevaPoblacion;
+            nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
+            poblacion = crossover(nuevaPoblacion);
+            mutation(poblacion);
+            medirFitness(poblacion);
+            Individuo mejor = cogerMejor(poblacion);
+            if (mejor.fitness == 0.0) {
+                break;
+            }
+        }
+        poblaciones.push_back(poblacion);
+    }
+
+    vector<Individuo> mejores;
+    for (Poblacion p : poblaciones) {
+        Individuo mejor = cogerMejor(p);
+        mejores.push_back(mejor);
+        //imprimirResultadoIndividuo(mejor);
+        //imprimirIndividuo(mejor);
+    }
+
+    /* Ordenamos por su fitness */
+    sort(mejores.begin(), mejores.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+
+    Individuo mejor = mejores.at(0);
+    imprimirResultadoIndividuo(mejor);
+    cout << "MEJOR INDIVIDUO -> " << endl;
+    imprimirIndividuo(mejor);
+
+    return;
+    /*
+    if (iteracion < GENERACIONES) {
+        cout << "FIN ANTES DE LAS GENERACIONES" << endl;
+    } else {
+        cout << "TODAS LAS GENERACIONES PASADAS" << endl;
+    }
+
+    cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
+    Individuo mejor = cogerMejor(poblacion);
+    cogerMejor(poblacion);
+    imprimirResultadoIndividuo(mejor);
+    cout << "MEJOR INDIVIDUO -> " << endl;
+    imprimirIndividuo(mejor);*/
+}
+
+long long mseconds() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec * 1000 + t.tv_usec / 1000;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 1 + 1) {
+        cout << "\tUso: " << argv[0] << " [fichero] " << endl;
+        return 1;
+    }
+    leer(&d, argv[1]);
+
+    srand(time(NULL));
+
+    long long ti, tf;
+    ti = mseconds();
+    secuencial();
+    tf = mseconds();
+    cout << "Tiempo secuencial: " << (tf - ti) / 1000.0 << " segundos" << endl;
+
+    ti = mseconds();
+    openmp();
+    tf = mseconds();
+    cout << "Tiempo paralelo: " << (tf - ti) / 1000.0 << " segundos" << endl;
 
     return 0;
 }

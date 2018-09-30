@@ -1,5 +1,5 @@
 all: secuencial.cpp
-	g++ -std=c++11 secuencial.cpp -o secuencial.out
+	g++ -std=c++11 secuencial.cpp -o secuencial.out -fopenmp
 
 generador: generador.cpp
 	g++ -std=c++11 generador.cpp -o generador.out
