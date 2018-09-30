@@ -9,3 +9,6 @@ Veamos qué sale...
 
 Versión día 24/09/2018
 ![alt text](http://kiribogach.es/archivos/mpp_24_09_2018.png)
+
+Versión día 01/10/2018
+![alt text](http://kiribogach.es/archivos/mpp_01_10_2018.png)
