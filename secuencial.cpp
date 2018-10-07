@@ -15,34 +15,31 @@ Esquema de un algoritmo genético:
 */
 
 #include <omp.h>
-#include <stdlib.h>
 #include <sys/time.h>
 #include <time.h>
-#include <algorithm>  // std::sort
+#include <algorithm>
 #include <cerrno>
 #include <climits>
 #include <cmath>
 #include <cstdio>
-#include <cstring>
-#include <fstream>
 #include <iostream>
 #include <vector>
 
 using namespace std;
 
-/* DEFINICION DE CONSTANTES */
-const int GENERACIONES = 500;
-const int TAM_POBLACION = 200;
-const float PROB_CRUCE = 0.9;
-const float PROB_MUT = 0.1;
+/* DEFINICION DE VARIABLES DEL PROBLEMA */
+int np;            // Personas
+int ng;            // Grupos
+int na;            // Asignaturas
+int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
-/* DEFINICION DE DATOS */
-typedef struct {
-    int np;            // personas
-    int ns;            // subgrupos
-    int na;            // asignaturas
-    int **matriculas;  // las asignaturas cursadas por cada alumno
-} Datos;
+/* DEFINICION DE VARIABLES DEL ALGORITMO */
+int generaciones;   // Nº iteraciones para buscar la mejor solución.
+int tam_poblacion;  // Nº individiuos de una población.
+float p_cruce;      // Probabilidad de cruce de una pareja
+float p_mut;        // Probabilidad de mutación de genes
+
+/* DEFINICION DE ESTRUCTURAS DE DATOS */
 
 typedef struct {
     vector<int> asignaciones;  // Vector con tamaño np con valores enteros del subgrupo al que pertence
@@ -50,34 +47,14 @@ typedef struct {
 } Individuo;
 
 typedef struct {
-    vector<Individuo> individuos = vector<Individuo>(TAM_POBLACION);
+    vector<Individuo> individuos = vector<Individuo>(tam_poblacion);
 } Poblacion;
 
-Datos d;  // global
-
-/* Lectura desde fichero hacia 'd' */
-void leer(Datos *d, char *fichero) {
-    ifstream f(fichero);
-
-    if (f.fail()) {
-        cerr << "Error: " << strerror(errno) << endl;
-        exit(1);
-    }
-
-    f >> d->np >> d->ns >> d->na;
-
-    d->matriculas = new int *[d->np];
-    for (int i = 0; i < d->np; i++) {
-        d->matriculas[i] = new int[d->na];
-    }
-
-    for (int i = 0; i < d->np; i++) {
-        for (int j = 0; j < d->na; j++) {
-            f >> d->matriculas[i][j];
-        }
-    }
-
-    f.close();
+/* FUNCIONES ÚTILES */
+long long mseconds() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return t.tv_sec * 1000 + t.tv_usec / 1000;
 }
 
 /* Devuelve un número decimal al azar entre [0, 1] */
@@ -91,7 +68,7 @@ double uniforme() {
     ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
 */
 double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
-    int suma = 0;
+    /*int suma = 0;
     int max = 0;
     for (int asignacion : asignaciones) {
         if (asignacion > max) {
@@ -99,8 +76,7 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
         }
         suma += asignacion;
     }
-    return suma * max;
-    /*
+    return suma * max;*/
     int max = 0;
     double media = 0.0;
     for (int asignacion : asignaciones) {
@@ -109,26 +85,53 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
             max = asignacion;
         }
     }
-    media /= d.na;
+    media /= na;
 
     double desviacion = 0.0;
     for (int asignacion : asignaciones) {
         desviacion += abs(media - asignacion);
     }
-    desviacion /= d.na;
+    desviacion /= na;
 
     return desviacion + max;
-    */
 }
 
-// TODO: los imprimir y tal meterlo en un utils.cpp
+int maximaDiferencia(vector<int> v) {
+    int max = INT_MIN;
+    int min = INT_MAX;
+
+    for (int elem : v) {
+        if (elem > max) {
+            max = elem;
+        }
+        if (elem < min) {
+            min = elem;
+        }
+    }
+
+    return max - min;
+}
+
+void leer() {
+    cin >> np >> ng >> na;
+    asignaturas = new int[np * na];
+    for (int i = 0; i < np; i++) {
+        for (int j = 0; j < na; j++) {
+            int index = i * na + j;
+            cin >> asignaturas[index];
+        }
+    }
+}
+
+/* FUNCIONES PARA DEBUGGIN */
 void imprimirDatos() {
-    cout << d.np << ' ';
-    cout << d.ns << ' ';
-    cout << d.na << endl;
-    for (int i = 0; i < d.np; i++) {
-        for (int j = 0; j < d.na; j++) {
-            cout << d.matriculas[i][j] << ' ';
+    cout << np << ' ';
+    cout << ng << ' ';
+    cout << na << endl;
+    for (int i = 0; i < np; i++) {
+        for (int j = 0; j < na; j++) {
+            int index = i * na + j;
+            cout << asignaturas[index] << ' ';
         }
         cout << endl;
     }
@@ -158,29 +161,13 @@ void impimirPoblacion(Poblacion poblacion) {
     cout << endl;
 }
 
-int maximaDiferencia(vector<int> v) {
-    int max = INT_MIN;
-    int min = INT_MAX;
-
-    for (int elem : v) {
-        if (elem > max) {
-            max = elem;
-        }
-        if (elem < min) {
-            min = elem;
-        }
-    }
-
-    return max - min;
-}
-
 vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
 
-    for (int subgrupo = 0; subgrupo < d.ns; subgrupo++) {
+    for (int subgrupo = 0; subgrupo < ng; subgrupo++) {
         cout << "subgrupo " << subgrupo + 1 << " = ";
         vector<int> alumnosAsignatura;  // el nº de alumnos de cada asignatura del subgrupo
-        for (int j = 0; j < d.na; j++) {
+        for (int j = 0; j < na; j++) {
             alumnosAsignatura.push_back(0);
         }
 
@@ -188,8 +175,9 @@ vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
 
         for (int alumno = 0; alumno < asignaciones.size(); alumno++) {
             if (subgrupo != asignaciones.at(alumno)) continue;
-            for (int m = 0; m < d.na; m++) {
-                alumnosAsignatura.at(m) += d.matriculas[alumno][m];
+            for (int m = 0; m < na; m++) {
+                int index = alumno * na + m;
+                alumnosAsignatura.at(m) += asignaturas[index];
             }
         }
 
@@ -199,7 +187,7 @@ vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
     }
 
     vector<int> maximas;
-    for (int asignatura = 0; asignatura < d.na; asignatura++) {
+    for (int asignatura = 0; asignatura < na; asignatura++) {
         vector<int> diferencias;
         for (vector<int> v : subgrupos) {
             diferencias.push_back(v.at(asignatura));
@@ -230,19 +218,21 @@ void imprimirMedirFitness(Poblacion &poblacion) {
 void inicializarPoblacion(Poblacion &poblacion) {
     for (int i = 0; i < poblacion.individuos.size(); i++) {
         vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
-        for (int j = 0; j < d.np; j++) {
-            int random = (rand() % d.ns);
+        for (int j = 0; j < np; j++) {
+            int random = (rand() % ng);
             asignaciones.push_back(random);
         }
     }
 }
 
+/* FUNCIONALIDAD INTRÍNSECA */
+
 vector<int> resultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
 
-    for (int subgrupo = 0; subgrupo < d.ns; subgrupo++) {
+    for (int subgrupo = 0; subgrupo < ng; subgrupo++) {
         vector<int> alumnosAsignatura;  // el nº de alumnos de cada asignatura del subgrupo
-        for (int j = 0; j < d.na; j++) {
+        for (int j = 0; j < na; j++) {
             alumnosAsignatura.push_back(0);
         }
 
@@ -250,8 +240,9 @@ vector<int> resultadoIndividuo(Individuo &individuo) {
 
         for (int alumno = 0; alumno < asignaciones.size(); alumno++) {
             if (subgrupo != asignaciones.at(alumno)) continue;
-            for (int m = 0; m < d.na; m++) {
-                alumnosAsignatura.at(m) += d.matriculas[alumno][m];
+            for (int m = 0; m < na; m++) {
+                int index = alumno * na + m;
+                alumnosAsignatura.at(m) += asignaturas[index];
             }
         }
 
@@ -259,7 +250,7 @@ vector<int> resultadoIndividuo(Individuo &individuo) {
     }
 
     vector<int> maximas;
-    for (int asignatura = 0; asignatura < d.na; asignatura++) {
+    for (int asignatura = 0; asignatura < na; asignatura++) {
         vector<int> diferencias;
         for (vector<int> v : subgrupos) {
             diferencias.push_back(v.at(asignatura));
@@ -293,7 +284,7 @@ Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
     const int k = 2;  // Binary tournament selection (k = 2) is most often used.
     vector<Individuo> azar;
     for (int j = 0; j < k; j++) {
-        azar.push_back(poblacion.individuos.at(rand() % TAM_POBLACION));
+        azar.push_back(poblacion.individuos.at(rand() % tam_poblacion));
     }
     sort(azar.begin(), azar.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
     Individuo mejor = azar.at(0);
@@ -302,7 +293,7 @@ Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
 
 vector<Individuo> seleccionPorTorneo(Poblacion &poblacion) {
     vector<Individuo> mejores;
-    for (int i = 0; i < TAM_POBLACION; i++) {
+    for (int i = 0; i < tam_poblacion; i++) {
         Individuo mejor = seleccionIndividuoPorTorneo(poblacion);
         mejores.push_back(mejor);
         // OJO podemos llegar a seleccionar mejores iguales
@@ -315,17 +306,17 @@ Poblacion crossover(Poblacion &poblacion) {
     Poblacion resultado;
     vector<Individuo> &individuos = resultado.individuos;
     int poblacionTotal = 0;
-    while (poblacionTotal < TAM_POBLACION) {
-        int indexPadre = rand() % TAM_POBLACION;
-        int indexMadre = rand() % TAM_POBLACION;
+    while (poblacionTotal < tam_poblacion) {
+        int indexPadre = rand() % tam_poblacion;
+        int indexMadre = rand() % tam_poblacion;
 
         Individuo &padre = poblacion.individuos.at(indexPadre);
         Individuo &madre = poblacion.individuos.at(indexMadre);
 
         /* 50% genes madre y 50% genes padre */
-        if (uniforme() <= PROB_CRUCE) {
+        if (uniforme() <= p_cruce) {
             Individuo hijo;
-            for (int i = 0; i < d.np; i++) {
+            for (int i = 0; i < np; i++) {
                 if (uniforme() >= 0.5) {
                     hijo.asignaciones.push_back(padre.asignaciones.at(i));
                 } else {
@@ -341,51 +332,49 @@ Poblacion crossover(Poblacion &poblacion) {
 void mutation(Poblacion &poblacion) {
     vector<Individuo> &individuos = poblacion.individuos;
     for (Individuo individuo : individuos) {
-        if (uniforme() <= PROB_MUT) {
-            int indice = rand() % d.np;
-            individuo.asignaciones.at(indice) = rand() % d.ns;
+        if (uniforme() <= p_mut) {
+            int indice = rand() % np;
+            individuo.asignaciones.at(indice) = rand() % ng;
         }
     }
 }
-
-void secuencial() {
+// generaciones, tam_poblacion, p_cruce, p_mut);
+double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
-    //impimirPoblacion(poblacion);
 
     int iteracion = 0;
-    for (; iteracion < GENERACIONES; iteracion++) {
+    for (; iteracion < generaciones; iteracion++) {
         Poblacion nuevaPoblacion;
         nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
         poblacion = crossover(nuevaPoblacion);
         mutation(poblacion);
         medirFitness(poblacion);
-        //impimirPoblacion(poblacion);
         Individuo mejor = cogerMejor(poblacion);
-        // cout << "ITERACION = " << iteracion << endl;
-        // imprimirIndividuo(mejor);
         if (mejor.fitness == 0.0) {
             break;  // encontramos la solución óptima
         }
     }
 
-    if (iteracion < GENERACIONES) {
+    /*if (iteracion < generaciones) {
         cout << "FIN ANTES DE LAS GENERACIONES" << endl;
     } else {
         cout << "TODAS LAS GENERACIONES PASADAS" << endl;
-    }
+    }*/
 
     cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
     Individuo mejor = cogerMejor(poblacion);
     imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR INDIVIDUO -> " << endl;
-    imprimirIndividuo(mejor);
+    cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
+
+    return mejor.fitness;
 }
 
-void openmp() {
+double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
     vector<Poblacion> poblaciones;
+    int iteraciones = generaciones / omp_get_num_threads();
 #pragma omp parallel shared(poblaciones)
     {
         Poblacion poblacion;
@@ -393,8 +382,7 @@ void openmp() {
         inicializarPoblacion(poblacion);
         medirFitness(poblacion);
 
-        int iteracion = 0;
-        for (; iteracion < GENERACIONES / omp_get_num_threads(); iteracion++) {
+        for (int iteracion = 0; iteracion < iteraciones; iteracion++) {
             Poblacion nuevaPoblacion;
             nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
             poblacion = crossover(nuevaPoblacion);
@@ -402,9 +390,10 @@ void openmp() {
             medirFitness(poblacion);
             Individuo mejor = cogerMejor(poblacion);
             if (mejor.fitness == 0.0) {
-                break;
+                break;  // TODO: FIX (maybe return mejor.fitness?)
             }
         }
+
         poblaciones.push_back(poblacion);
     }
 
@@ -421,48 +410,36 @@ void openmp() {
 
     Individuo mejor = mejores.at(0);
     imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR INDIVIDUO -> " << endl;
-    imprimirIndividuo(mejor);
+    cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
-    return;
-    /*
-    if (iteracion < GENERACIONES) {
-        cout << "FIN ANTES DE LAS GENERACIONES" << endl;
-    } else {
-        cout << "TODAS LAS GENERACIONES PASADAS" << endl;
-    }
-
-    cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
-    Individuo mejor = cogerMejor(poblacion);
-    cogerMejor(poblacion);
-    imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR INDIVIDUO -> " << endl;
-    imprimirIndividuo(mejor);*/
-}
-
-long long mseconds() {
-    struct timeval t;
-    gettimeofday(&t, NULL);
-    return t.tv_sec * 1000 + t.tv_usec / 1000;
+    // return mejor.fitness;
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 1 + 1) {
-        cout << "\tUso: " << argv[0] << " [fichero] " << endl;
-        return 1;
-    }
-    leer(&d, argv[1]);
-
+    /* Inicialización de números pseudoaleatorios */
     srand(time(NULL));
 
+    /* Lectura de datos */
+    leer();
+
+    /* Parámetros del algoritmo genético */
+    generaciones = 1000;
+    tam_poblacion = 200;
+    p_cruce = 0.9;
+    p_mut = 0.1;
+
+    /* Tiempos de ejecución */
     long long ti, tf;
+
+    /* Ejecución secuencial */
     ti = mseconds();
-    secuencial();
+    secuencial(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
     cout << "Tiempo secuencial: " << (tf - ti) / 1000.0 << " segundos" << endl;
 
+    /* Ejecución openmp */
     ti = mseconds();
-    openmp();
+    openmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
     cout << "Tiempo paralelo: " << (tf - ti) / 1000.0 << " segundos" << endl;
 
