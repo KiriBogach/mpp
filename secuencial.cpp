@@ -14,7 +14,6 @@ Esquema de un algoritmo genético:
 
 */
 
-#include <omp.h>
 #include <sys/time.h>
 #include <time.h>
 #include <algorithm>
@@ -313,17 +312,29 @@ Poblacion crossover(Poblacion &poblacion) {
         Individuo &padre = poblacion.individuos.at(indexPadre);
         Individuo &madre = poblacion.individuos.at(indexMadre);
 
-        /* 50% genes madre y 50% genes padre */
+        // Se cruzan en función de la probabilidad de cruce
         if (uniforme() <= p_cruce) {
             Individuo hijo;
+            Individuo hija;
             for (int i = 0; i < np; i++) {
+                /* 50% genes madre y 50% genes padre */
                 if (uniforme() >= 0.5) {
                     hijo.asignaciones.push_back(padre.asignaciones.at(i));
+                    hija.asignaciones.push_back(madre.asignaciones.at(i));
                 } else {
                     hijo.asignaciones.push_back(madre.asignaciones.at(i));
+                    hija.asignaciones.push_back(padre.asignaciones.at(i));
                 }
             }
             individuos.at(poblacionTotal++) = hijo;
+            if (poblacionTotal < tam_poblacion) {
+                individuos.at(poblacionTotal++) = hija;
+            }
+        } else {
+            individuos.at(poblacionTotal++) = padre;
+            if (poblacionTotal < tam_poblacion) {
+                individuos.at(poblacionTotal++) = madre;
+            }
         }
     }
     return resultado;
@@ -372,49 +383,6 @@ double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, in
     return mejor.fitness;
 }
 
-double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
-    vector<Poblacion> poblaciones;
-    int iteraciones = generaciones / omp_get_num_threads();
-#pragma omp parallel shared(poblaciones)
-    {
-        Poblacion poblacion;
-
-        inicializarPoblacion(poblacion);
-        medirFitness(poblacion);
-
-        for (int iteracion = 0; iteracion < iteraciones; iteracion++) {
-            Poblacion nuevaPoblacion;
-            nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
-            poblacion = crossover(nuevaPoblacion);
-            mutation(poblacion);
-            medirFitness(poblacion);
-            Individuo mejor = cogerMejor(poblacion);
-            if (mejor.fitness == 0.0) {
-                break;  // TODO: FIX (maybe return mejor.fitness?)
-            }
-        }
-
-        poblaciones.push_back(poblacion);
-    }
-
-    vector<Individuo> mejores;
-    for (Poblacion p : poblaciones) {
-        Individuo mejor = cogerMejor(p);
-        mejores.push_back(mejor);
-        //imprimirResultadoIndividuo(mejor);
-        //imprimirIndividuo(mejor);
-    }
-
-    /* Ordenamos por su fitness */
-    sort(mejores.begin(), mejores.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
-
-    Individuo mejor = mejores.at(0);
-    imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
-
-    // return mejor.fitness;
-}
-
 int main(int argc, char *argv[]) {
     /* Inicialización de números pseudoaleatorios */
     srand(time(NULL));
@@ -436,12 +404,6 @@ int main(int argc, char *argv[]) {
     secuencial(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
     cout << "Tiempo secuencial: " << (tf - ti) / 1000.0 << " segundos" << endl;
-
-    /* Ejecución openmp */
-    ti = mseconds();
-    openmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
-    tf = mseconds();
-    cout << "Tiempo paralelo: " << (tf - ti) / 1000.0 << " segundos" << endl;
 
     return 0;
 }
