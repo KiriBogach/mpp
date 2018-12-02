@@ -34,10 +34,21 @@ int na;            // Asignaturas
 int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
 /* DEFINICION DE VARIABLES DEL ALGORITMO */
-int generaciones;   // Nº iteraciones para buscar la mejor solución.
-int tam_poblacion;  // Nº individiuos de una población.
-float p_cruce;      // Probabilidad de cruce de una pareja
-float p_mut;        // Probabilidad de mutación de genes
+// Nº iteraciones para buscar la mejor solución.
+#define GENERACIONES 1000
+int generaciones;
+
+// Nº individiuos de una población.
+#define TAM_POBLACION 200
+int tam_poblacion;
+
+// Probabilidad de cruce de una pareja
+#define P_CRUCE 0.9
+float p_cruce;
+
+// Probabilidad de mutación de genes
+#define P_MUT 0.1
+float p_mut;
 
 /* DEFINICION DE ESTRUCTURAS DE DATOS */
 
@@ -353,8 +364,8 @@ void mutation(Poblacion &poblacion) {
 
 double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
     vector<Poblacion> poblaciones;
-    int iteraciones = generaciones / omp_get_num_threads();
-#pragma omp parallel shared(poblaciones)
+    int iteraciones = generaciones / omp_get_max_threads();
+#pragma omp parallel shared(poblaciones) firstprivate(iteraciones)
     {
         Poblacion poblacion;
 
@@ -369,7 +380,7 @@ double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int ta
             medirFitness(poblacion);
             Individuo mejor = cogerMejor(poblacion);
             if (mejor.fitness == 0.0) {
-                break;  // TODO: FIX (maybe return mejor.fitness?)
+                break;  // Termina el hilo
             }
         }
 
@@ -380,8 +391,6 @@ double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int ta
     for (Poblacion p : poblaciones) {
         Individuo mejor = cogerMejor(p);
         mejores.push_back(mejor);
-        //imprimirResultadoIndividuo(mejor);
-        //imprimirIndividuo(mejor);
     }
 
     /* Ordenamos por su fitness */
@@ -391,7 +400,7 @@ double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int ta
     imprimirResultadoIndividuo(mejor);
     cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
-    // return mejor.fitness;
+    return mejor.fitness;
 }
 
 int main(int argc, char *argv[]) {
@@ -402,19 +411,20 @@ int main(int argc, char *argv[]) {
     leer();
 
     /* Parámetros del algoritmo genético */
-    generaciones = 1000;
-    tam_poblacion = 200;
-    p_cruce = 0.9;
-    p_mut = 0.1;
+    generaciones = GENERACIONES;
+    tam_poblacion = TAM_POBLACION;
+    p_cruce = P_CRUCE;
+    p_mut = P_MUT;
 
     /* Tiempos de ejecución */
     long long ti, tf;
 
     /* Ejecución openmp */
     ti = mseconds();
-    openmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
+    double fitness = openmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
     cout << "Tiempo paralelo: " << (tf - ti) / 1000.0 << " segundos" << endl;
+    cout << "Fitness obtenido: " << fitness << endl;
 
     return 0;
 }

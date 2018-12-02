@@ -14,6 +14,8 @@ Esquema de un algoritmo genético:
 
 */
 
+#include <mpi.h>
+#include <omp.h>
 #include <sys/time.h>
 #include <time.h>
 #include <algorithm>
@@ -33,10 +35,21 @@ int na;            // Asignaturas
 int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
 /* DEFINICION DE VARIABLES DEL ALGORITMO */
-int generaciones;   // Nº iteraciones para buscar la mejor solución.
-int tam_poblacion;  // Nº individiuos de una población.
-float p_cruce;      // Probabilidad de cruce de una pareja
-float p_mut;        // Probabilidad de mutación de genes
+// Nº iteraciones para buscar la mejor solución.
+#define GENERACIONES 1000
+int generaciones;
+
+// Nº individiuos de una población.
+#define TAM_POBLACION 200
+int tam_poblacion;
+
+// Probabilidad de cruce de una pareja
+#define P_CRUCE 0.9
+float p_cruce;
+
+// Probabilidad de mutación de genes
+#define P_MUT 0.1
+float p_mut;
 
 /* DEFINICION DE ESTRUCTURAS DE DATOS */
 
@@ -349,34 +362,42 @@ void mutation(Poblacion &poblacion) {
         }
     }
 }
-// generaciones, tam_poblacion, p_cruce, p_mut);
-double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
-    Poblacion poblacion;
 
-    inicializarPoblacion(poblacion);
-    medirFitness(poblacion);
+double omp_mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
+    vector<Poblacion> poblaciones;
+    int iteraciones = generaciones / omp_get_max_threads();
+#pragma omp parallel shared(poblaciones) firstprivate(iteraciones) num_threads(2)
+    {
+        Poblacion poblacion;
 
-    int iteracion = 0;
-    for (; iteracion < generaciones; iteracion++) {
-        Poblacion nuevaPoblacion;
-        nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
-        poblacion = crossover(nuevaPoblacion);
-        mutation(poblacion);
+        inicializarPoblacion(poblacion);
         medirFitness(poblacion);
-        Individuo mejor = cogerMejor(poblacion);
-        if (mejor.fitness == 0.0) {
-            break;  // Encontramos la solución óptima
+
+        for (int iteracion = 0; iteracion < iteraciones; iteracion++) {
+            Poblacion nuevaPoblacion;
+            nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
+            poblacion = crossover(nuevaPoblacion);
+            mutation(poblacion);
+            medirFitness(poblacion);
+            Individuo mejor = cogerMejor(poblacion);
+            if (mejor.fitness == 0.0) {
+                break;  // Termina el hilo
+            }
         }
+
+        poblaciones.push_back(poblacion);
     }
 
-    /*if (iteracion < generaciones) {
-        cout << "FIN ANTES DE LAS GENERACIONES" << endl;
-    } else {
-        cout << "TODAS LAS GENERACIONES PASADAS" << endl;
-    }*/
+    vector<Individuo> mejores;
+    for (Poblacion p : poblaciones) {
+        Individuo mejor = cogerMejor(p);
+        mejores.push_back(mejor);
+    }
 
-    cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
-    Individuo mejor = cogerMejor(poblacion);
+    /* Ordenamos por su fitness */
+    sort(mejores.begin(), mejores.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+
+    Individuo mejor = mejores.at(0);
     imprimirResultadoIndividuo(mejor);
     cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
@@ -387,24 +408,59 @@ int main(int argc, char *argv[]) {
     /* Inicialización de números pseudoaleatorios */
     srand(time(NULL));
 
-    /* Lectura de datos */
-    leer();
+    /* Inicialización MPI */
+    int nodo, procesos, ROOT = 0;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &procesos);
+    MPI_Comm_rank(MPI_COMM_WORLD, &nodo);
+
+    /* Lectura y compartición de datos */
+    if (nodo == ROOT) {
+        leer();
+        MPI_Bcast(&np, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(&ng, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(&na, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
+        generaciones = GENERACIONES / procesos;
+        MPI_Bcast(&generaciones, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+    } else {
+        MPI_Bcast(&np, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(&ng, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(&na, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        asignaturas = new int[np * na];
+        MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(&generaciones, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+    }
 
     /* Parámetros del algoritmo genético */
-    generaciones = 1000;
-    tam_poblacion = 200;
-    p_cruce = 0.9;
-    p_mut = 0.1;
+
+    tam_poblacion = TAM_POBLACION;
+    p_cruce = P_CRUCE;
+    p_mut = P_MUT;
 
     /* Tiempos de ejecución */
     long long ti, tf;
 
     /* Ejecución secuencial */
     ti = mseconds();
-    double fitness = secuencial(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
+    double fitness = omp_mpi(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
-    cout << "Tiempo secuencial: " << (tf - ti) / 1000.0 << " segundos" << endl;
-    cout << "Fitness obtenido: " << fitness << endl;
 
+    if (nodo != ROOT) {
+        MPI_Send(&fitness, 1, MPI_DOUBLE, ROOT, 20, MPI_COMM_WORLD);
+    } else {
+        double mejor_fitness = fitness;
+        for (int proceso = 1; proceso < proceso; proceso++) {
+            int fitness_recibido;
+            MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 20, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            if (fitness_recibido < mejor_fitness) {
+                mejor_fitness = fitness_recibido;
+            }
+        }
+        cout << "Tiempo omp_mpi: " << (tf - ti) / 1000.0 << " segundos" << endl;
+        cout << "Fitness obtenido: " << mejor_fitness << endl;
+    }
+
+    MPI_Finalize();
     return 0;
 }
