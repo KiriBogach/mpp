@@ -79,15 +79,6 @@ double uniforme() {
     ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
 */
 double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
-    /*int suma = 0;
-    int max = 0;
-    for (int asignacion : asignaciones) {
-        if (asignacion > max) {
-            max = asignacion;
-        }
-        suma += asignacion;
-    }
-    return suma * max;*/
     int max = 0;
     double media = 0.0;
     for (int asignacion : asignaciones) {
@@ -284,10 +275,14 @@ void medirFitness(Poblacion &poblacion) {
     }
 }
 
+bool ordenacion(Individuo a, Individuo b) {
+    return a.fitness < b.fitness;
+}
+
 Individuo cogerMejor(Poblacion &poblacion) {
     vector<Individuo> &individuos = poblacion.individuos;
     /* Ordenamos por su fitness */
-    sort(individuos.begin(), individuos.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    sort(individuos.begin(), individuos.end(), ordenacion);
     return individuos.at(0);  // con el menor fitness
 }
 
@@ -297,7 +292,7 @@ Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
     for (int j = 0; j < k; j++) {
         azar.push_back(poblacion.individuos.at(rand() % tam_poblacion));
     }
-    sort(azar.begin(), azar.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    sort(azar.begin(), azar.end(), ordenacion);
     Individuo mejor = azar.at(0);
     return mejor;
 }
@@ -394,11 +389,11 @@ double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int ta
     }
 
     /* Ordenamos por su fitness */
-    sort(mejores.begin(), mejores.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    sort(mejores.begin(), mejores.end(), ordenacion);
 
     Individuo mejor = mejores.at(0);
-    imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
+    //imprimirResultadoIndividuo(mejor);
+    //cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
     return mejor.fitness;
 }
@@ -423,7 +418,7 @@ int main(int argc, char *argv[]) {
     ti = mseconds();
     double fitness = openmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
-    cout << "Tiempo paralelo: " << (tf - ti) / 1000.0 << " segundos" << endl;
+    cout << "Tiempo OMP: " << (tf - ti) / 1000.0 << " segundos" << endl;
     cout << "Fitness obtenido: " << fitness << endl;
 
     return 0;

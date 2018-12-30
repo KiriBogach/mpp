@@ -80,15 +80,6 @@ double uniforme() {
     ((5/4-1) + (2-5/4) + (2-5/4) + (5/4-0)) / 4 = 0.75
 */
 double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
-    /*int suma = 0;
-    int max = 0;
-    for (int asignacion : asignaciones) {
-        if (asignacion > max) {
-            max = asignacion;
-        }
-        suma += asignacion;
-    }
-    return suma * max;*/
     int max = 0;
     double media = 0.0;
     for (int asignacion : asignaciones) {
@@ -285,10 +276,14 @@ void medirFitness(Poblacion &poblacion) {
     }
 }
 
+bool ordenacion(Individuo a, Individuo b) {
+    return a.fitness < b.fitness;
+}
+
 Individuo cogerMejor(Poblacion &poblacion) {
     vector<Individuo> &individuos = poblacion.individuos;
     /* Ordenamos por su fitness */
-    sort(individuos.begin(), individuos.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    sort(individuos.begin(), individuos.end(), ordenacion);
     return individuos.at(0);  // con el menor fitness
 }
 
@@ -298,7 +293,7 @@ Individuo seleccionIndividuoPorTorneo(Poblacion &poblacion) {
     for (int j = 0; j < k; j++) {
         azar.push_back(poblacion.individuos.at(rand() % tam_poblacion));
     }
-    sort(azar.begin(), azar.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
+    sort(azar.begin(), azar.end(), ordenacion);
     Individuo mejor = azar.at(0);
     return mejor;
 }
@@ -395,11 +390,8 @@ double omp_mpi(int np, int ng, int na, int *asignaturas, int generaciones, int t
     }
 
     /* Ordenamos por su fitness */
-    sort(mejores.begin(), mejores.end(), [](Individuo &a, Individuo &b) { return a.fitness < b.fitness; });
-
+    sort(mejores.begin(), mejores.end(), ordenacion);
     Individuo mejor = mejores.at(0);
-    imprimirResultadoIndividuo(mejor);
-    cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
     return mejor.fitness;
 }
@@ -414,22 +406,22 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &procesos);
     MPI_Comm_rank(MPI_COMM_WORLD, &nodo);
 
+    generaciones = GENERACIONES / procesos;
+
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
         leer();
-        MPI_Bcast(&np, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
-        MPI_Bcast(&ng, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
-        MPI_Bcast(&na, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        int parametros[] = {np, ng, na};
+        MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
         MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
-        generaciones = GENERACIONES / procesos;
-        MPI_Bcast(&generaciones, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
     } else {
-        MPI_Bcast(&np, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
-        MPI_Bcast(&ng, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
-        MPI_Bcast(&na, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
+        int parametros[3];
+        MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
+        np = parametros[0];
+        ng = parametros[1];
+        na = parametros[2];
         asignaturas = new int[np * na];
         MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
-        MPI_Bcast(&generaciones, 1, MPI_INT, ROOT, MPI_COMM_WORLD);
     }
 
     /* Parámetros del algoritmo genético */
@@ -457,7 +449,7 @@ int main(int argc, char *argv[]) {
                 mejor_fitness = fitness_recibido;
             }
         }
-        cout << "Tiempo omp_mpi: " << (tf - ti) / 1000.0 << " segundos" << endl;
+        cout << "Tiempo OMP_MPI: " << (tf - ti) / 1000.0 << " segundos" << endl;
         cout << "Fitness obtenido: " << mejor_fitness << endl;
     }
 
