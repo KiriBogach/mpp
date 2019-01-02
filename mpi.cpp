@@ -198,10 +198,10 @@ vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
     }
 
     cout << endl
-         << "diff max = ";
+    << "diff max = ";
     imprimirVector(maximas);
     cout << endl
-         << endl;
+    << endl;
 
     return maximas;
 }
@@ -357,13 +357,63 @@ void mutation(Poblacion &poblacion) {
     }
 }
 
-double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
+void incluirIndividuos(Poblacion &poblacion, vector<Individuo> nuevos) {
+    vector<Individuo> &individuos = poblacion.individuos;
+
+    // Sabemos que los individuos están ordenados de menor a mayor fitness
+    int index = tam_poblacion - 1;
+    for (Individuo i : nuevos) {
+        individuos.at(index) = i;
+        index--;
+    }
+}
+
+Individuo construirIndividuo(int *asignaciones_recibido, double fitness_recibido) {
+    vector<int> asignaciones_recibido_vector(asignaciones_recibido, asignaciones_recibido + np);
+
+    Individuo individuo_recibido;
+    individuo_recibido.fitness = fitness_recibido;
+    individuo_recibido.asignaciones = asignaciones_recibido_vector;
+
+    return individuo_recibido;
+}
+
+void comunicar(Poblacion poblacion, Individuo mi_mejor, int nodo, int procesos) {
+    vector<Individuo> individuos_recibidos;
+    for (int proceso = 0; proceso < procesos; proceso++) {
+        if (proceso == nodo) continue;
+        MPI_Send(&mi_mejor.fitness, 1, MPI_DOUBLE, proceso, 80, MPI_COMM_WORLD);
+        MPI_Send(&mi_mejor.asignaciones[0], np, MPI_INT, proceso, 100, MPI_COMM_WORLD);
+    }
+
+    for (int proceso = 0; proceso < procesos; proceso++) {
+        if (proceso == nodo) continue;
+        double fitness_recibido;
+        int asignaciones_recibido[np];
+
+        MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 80, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&asignaciones_recibido, np, MPI_INT, proceso, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        individuos_recibidos.push_back(construirIndividuo(asignaciones_recibido, fitness_recibido));
+    }
+
+    incluirIndividuos(poblacion, individuos_recibidos);
+}
+
+double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut, 
+    int nodo, int procesos, int generaciones_comunicacion) {
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
 
     for (int iteracion = 0; iteracion < generaciones; iteracion++) {
+
+        if (iteracion % generaciones_comunicacion == 0) {
+            Individuo mejor = cogerMejor(poblacion);
+            comunicar(poblacion, mejor, nodo, procesos);
+        }
+
         Poblacion nuevaPoblacion;
         nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
         poblacion = crossover(nuevaPoblacion);
@@ -376,7 +426,7 @@ double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_p
     }
 
     Individuo mejor = cogerMejor(poblacion);
-    imprimirIndividuo(mejor);
+    //imprimirIndividuo(mejor);
     return mejor.fitness;
 }
 
@@ -391,6 +441,7 @@ int main(int argc, char *argv[]) {
     srand(time(NULL) + nodo);
 
     generaciones = GENERACIONES / procesos;
+    int generaciones_comunicacion = generaciones / 4;
 
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
@@ -420,7 +471,7 @@ int main(int argc, char *argv[]) {
 
     /* Ejecución MPI */
     ti = mseconds();
-    double fitness = mpi(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
+    double fitness = mpi(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut, nodo, procesos, generaciones_comunicacion);
     tf = mseconds();
 
     if (nodo != ROOT) {
