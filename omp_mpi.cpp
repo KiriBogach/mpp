@@ -397,19 +397,20 @@ double omp_mpi(int np, int ng, int na, int *asignaturas, int generaciones, int t
 }
 
 int main(int argc, char *argv[]) {
-    /* Inicialización de números pseudoaleatorios */
-    srand(time(NULL));
-
     /* Inicialización MPI */
     int nodo, procesos, ROOT = 0;
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &procesos);
     MPI_Comm_rank(MPI_COMM_WORLD, &nodo);
 
+    /* Inicialización de números pseudoaleatorios */
+    srand(time(NULL) + nodo);
+
     generaciones = GENERACIONES / procesos;
 
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
+        cout << "Generaciones por proceso/hilo: " << generaciones / 2 << endl;
         leer();
         int parametros[] = {np, ng, na};
         MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
@@ -442,8 +443,8 @@ int main(int argc, char *argv[]) {
         MPI_Send(&fitness, 1, MPI_DOUBLE, ROOT, 20, MPI_COMM_WORLD);
     } else {
         double mejor_fitness = fitness;
-        for (int proceso = 1; proceso < proceso; proceso++) {
-            int fitness_recibido;
+        for (int proceso = 1; proceso < procesos; proceso++) {
+            double fitness_recibido;
             MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 20, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             if (fitness_recibido < mejor_fitness) {
                 mejor_fitness = fitness_recibido;

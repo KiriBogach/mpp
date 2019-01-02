@@ -14,6 +14,7 @@ Esquema de un algoritmo genético:
 
 */
 
+#include <mpi.h>
 #include <sys/time.h>
 #include <time.h>
 #include <algorithm>
@@ -355,15 +356,14 @@ void mutation(Poblacion &poblacion) {
         }
     }
 }
-// generaciones, tam_poblacion, p_cruce, p_mut);
-double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
+
+Individuo mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
 
-    int iteracion = 0;
-    for (; iteracion < generaciones; iteracion++) {
+    for (int iteracion = 0; iteracion < generaciones; iteracion++) {
         Poblacion nuevaPoblacion;
         nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
         poblacion = crossover(nuevaPoblacion);
@@ -375,44 +375,85 @@ double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, in
         }
     }
 
-    /*if (iteracion < generaciones) {
-        cout << "FIN ANTES DE LAS GENERACIONES" << endl;
-    } else {
-        cout << "TODAS LAS GENERACIONES PASADAS" << endl;
-    }*/
-
-    //cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
     Individuo mejor = cogerMejor(poblacion);
-    //imprimirResultadoIndividuo(mejor);
-    //cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
+    return mejor;
+}
 
-    return mejor.fitness;
+Individuo construirIndividuo(int *asignaciones_recibido, double fitness_recibido) {
+    vector<int> asignaciones_recibido_vector(asignaciones_recibido, asignaciones_recibido + np);
+
+    Individuo individuo_recibido;
+    individuo_recibido.fitness = fitness_recibido;
+    individuo_recibido.asignaciones = asignaciones_recibido_vector;
+
+    return individuo_recibido;
 }
 
 int main(int argc, char *argv[]) {
-    /* Inicialización de números pseudoaleatorios */
-    srand(time(NULL));
+    /* Inicialización MPI */
+    int nodo, procesos, ROOT = 0;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &procesos);
+    MPI_Comm_rank(MPI_COMM_WORLD, &nodo);
 
-    /* Lectura de datos */
-    leer();
+    /* Inicialización de números pseudoaleatorios */
+    srand(time(NULL) + nodo);
+
+    generaciones = GENERACIONES / procesos;
+
+    /* Lectura y compartición de datos */
+    if (nodo == ROOT) {
+        cout << "Generaciones por proceso: " << generaciones << endl;
+        leer();
+        int parametros[] = {np, ng, na};
+        MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
+        MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
+    } else {
+        int parametros[3];
+        MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
+        np = parametros[0];
+        ng = parametros[1];
+        na = parametros[2];
+        asignaturas = new int[np * na];
+        MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
+    }
 
     /* Parámetros del algoritmo genético */
-    generaciones = GENERACIONES;
+
     tam_poblacion = TAM_POBLACION;
     p_cruce = P_CRUCE;
     p_mut = P_MUT;
-
-    cout << "Generaciones: " << generaciones << endl;
 
     /* Tiempos de ejecución */
     long long ti, tf;
 
     /* Ejecución secuencial */
     ti = mseconds();
-    double fitness = secuencial(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
+    Individuo mi_mejor = mpi(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
     tf = mseconds();
-    cout << "Tiempo SECUENCIAL: " << (tf - ti) / 1000.0 << " segundos" << endl;
-    cout << "Fitness obtenido: " << fitness << endl;
 
+    if (nodo != ROOT) {
+        MPI_Send(&mi_mejor.fitness, 1, MPI_DOUBLE, ROOT, 20, MPI_COMM_WORLD);
+        MPI_Send(&mi_mejor.asignaciones[0], np, MPI_INT, ROOT, 40, MPI_COMM_WORLD);
+    } else {
+        Individuo &mejor_individuo = mi_mejor;
+        for (int proceso = 1; proceso < procesos; proceso++) {
+            double fitness_recibido;
+            int asignaciones_recibido[np];
+
+            MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 20, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&asignaciones_recibido, np, MPI_INT, proceso, 40, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            Individuo individuo_recibido = construirIndividuo(asignaciones_recibido, fitness_recibido);
+
+            if (individuo_recibido.fitness < mejor_individuo.fitness) {
+                mejor_individuo = individuo_recibido;
+            }
+        }
+        cout << "Tiempo MPI: " << (tf - ti) / 1000.0 << " segundos" << endl;
+        cout << "Fitness obtenido: " << mejor_individuo.fitness << endl;
+    }
+
+    MPI_Finalize();
     return 0;
 }

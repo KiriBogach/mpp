@@ -360,7 +360,8 @@ void mutation(Poblacion &poblacion) {
 double openmp(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
     vector<Poblacion> poblaciones;
     int iteraciones = generaciones / omp_get_max_threads();
-#pragma omp parallel shared(poblaciones) firstprivate(iteraciones)
+    cout << "Generaciones por hilo: " << iteraciones << endl;
+#pragma omp parallel firstprivate(iteraciones) shared(poblaciones)
     {
         Poblacion poblacion;
 
