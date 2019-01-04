@@ -139,6 +139,14 @@ void imprimirDatos() {
     }
 }
 
+void imprimirCasoUso() {
+    cout << "Problema:" << endl;
+    cout << "\tnp:" << np << ", ng:" << ng << ", na:" << na << endl;
+    cout << "Genetico:" << endl;
+    cout << "\tgeneraciones:" << GENERACIONES << ", tam_poblacion:" << TAM_POBLACION << ", p_cruce:" << P_CRUCE << ", p_mut:" << P_MUT << endl
+         << endl;
+}
+
 void imprimirVector(vector<int> v, bool incremento = false) {
     cout << "[ ";
     for (int elem : v) {
@@ -411,6 +419,8 @@ int main(int argc, char *argv[]) {
     tam_poblacion = TAM_POBLACION;
     p_cruce = P_CRUCE;
     p_mut = P_MUT;
+
+    imprimirCasoUso();
 
     /* Tiempos de ejecución */
     long long ti, tf;

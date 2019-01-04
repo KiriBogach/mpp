@@ -139,6 +139,14 @@ void imprimirDatos() {
     }
 }
 
+void imprimirCasoUso() {
+    cout << "Problema:" << endl;
+    cout << "\tnp:" << np << ", ng:" << ng << ", na:" << na << endl;
+    cout << "Genetico:" << endl;
+    cout << "\tgeneraciones:" << GENERACIONES << ", tam_poblacion:" << TAM_POBLACION << ", p_cruce:" << P_CRUCE << ", p_mut:" << P_MUT << endl
+         << endl;
+}
+
 void imprimirVector(vector<int> v, bool incremento = false) {
     cout << "[ ";
     for (int elem : v) {
@@ -198,10 +206,10 @@ vector<int> imprimirResultadoIndividuo(Individuo &individuo) {
     }
 
     cout << endl
-    << "diff max = ";
+         << "diff max = ";
     imprimirVector(maximas);
     cout << endl
-    << endl;
+         << endl;
 
     return maximas;
 }
@@ -400,15 +408,14 @@ void comunicar(Poblacion poblacion, Individuo mi_mejor, int nodo, int procesos) 
     incluirIndividuos(poblacion, individuos_recibidos);
 }
 
-double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut, 
-    int nodo, int procesos, int generaciones_comunicacion) {
+double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut,
+           int nodo, int procesos, int generaciones_comunicacion) {
     Poblacion poblacion;
 
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
 
     for (int iteracion = 0; iteracion < generaciones; iteracion++) {
-
         if (iteracion % generaciones_comunicacion == 0) {
             Individuo mejor = cogerMejor(poblacion);
             comunicar(poblacion, mejor, nodo, procesos);
@@ -443,10 +450,16 @@ int main(int argc, char *argv[]) {
     generaciones = GENERACIONES / procesos;
     int generaciones_comunicacion = generaciones / 4;
 
+    /* Parámetros del algoritmo genético */
+    tam_poblacion = TAM_POBLACION;
+    p_cruce = P_CRUCE;
+    p_mut = P_MUT;
+
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
-        cout << "Generaciones por proceso: " << generaciones << endl;
         leer();
+        imprimirCasoUso();
+        cout << "Generaciones por proceso: " << generaciones << endl;
         int parametros[] = {np, ng, na};
         MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
         MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
@@ -459,12 +472,6 @@ int main(int argc, char *argv[]) {
         asignaturas = new int[np * na];
         MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
     }
-
-    /* Parámetros del algoritmo genético */
-
-    tam_poblacion = TAM_POBLACION;
-    p_cruce = P_CRUCE;
-    p_mut = P_MUT;
 
     /* Tiempos de ejecución */
     long long ti, tf;
