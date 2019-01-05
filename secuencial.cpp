@@ -1,18 +1,9 @@
-/* Cabecera TODO
-
-c++11
-
-
-
-Esquema de un algoritmo genético:
-    Initial population
-    Fitness function
-    Selection
-    Crossover
-    Mutation
-
-
-*/
+/*******************************************************************************/
+/*********				   4º Ingenieria del Software				  **********/
+/*********	  			   Universidad Murcia - MPP       		  	  **********/
+/*********				   Alumno: Kyryl Bogach					  	  **********/
+/*********				   Profesor: Domingo Giménez Cánovas		  **********/
+/*******************************************************************************/
 
 #include <sys/time.h>
 #include <time.h>
@@ -33,6 +24,9 @@ int na;            // Asignaturas
 int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
 /* DEFINICION DE VARIABLES DEL ALGORITMO */
+// Indica si la función fitness pondera con el máximo
+#define MEJORA_FITNESS 1
+
 // Nº iteraciones para buscar la mejor solución.
 #define GENERACIONES 1000
 int generaciones;
@@ -94,7 +88,10 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
     }
     desviacion /= na;
 
-    return desviacion + max;
+    if (MEJORA_FITNESS) {
+        desviacion += max;
+    }
+    return desviacion;
 }
 
 int maximaDiferencia(vector<int> v) {
@@ -224,6 +221,8 @@ void imprimirMedirFitness(Poblacion &poblacion) {
     }
 }
 
+/* FUNCIONALIDAD INTRÍNSECA */
+
 void inicializarPoblacion(Poblacion &poblacion) {
     for (int i = 0; i < poblacion.individuos.size(); i++) {
         vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
@@ -233,8 +232,6 @@ void inicializarPoblacion(Poblacion &poblacion) {
         }
     }
 }
-
-/* FUNCIONALIDAD INTRÍNSECA */
 
 vector<int> resultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
@@ -345,6 +342,7 @@ Poblacion crossover(Poblacion &poblacion) {
                 individuos.at(poblacionTotal++) = hija;
             }
         } else {
+            // Control de imparidad
             individuos.at(poblacionTotal++) = padre;
             if (poblacionTotal < tam_poblacion) {
                 individuos.at(poblacionTotal++) = madre;
@@ -389,10 +387,8 @@ double secuencial(int np, int ng, int na, int *asignaturas, int generaciones, in
         cout << "TODAS LAS GENERACIONES PASADAS" << endl;
     }*/
 
-    //cout << "SUBGRUPOS Y DIFF MAX -> " << endl;
     Individuo mejor = cogerMejor(poblacion);
     //imprimirResultadoIndividuo(mejor);
-    //cout << "MEJOR FITNESS -> " << mejor.fitness << endl;
 
     return mejor.fitness;
 }
@@ -410,7 +406,7 @@ int main(int argc, char *argv[]) {
     p_cruce = P_CRUCE;
     p_mut = P_MUT;
 
-    cout << "Generaciones: " << generaciones << endl;
+    imprimirCasoUso();
 
     /* Tiempos de ejecución */
     long long ti, tf;

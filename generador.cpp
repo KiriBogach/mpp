@@ -27,7 +27,6 @@ int main(int argc, char *argv[]) {
     cout << np << " " << ns << " " << na << endl;
     for (int i = 0; i < np; i++) {
         for (int j = 0; j < na; j++) {
-            //cout << uniforme();
             if (uniforme() <= p_matriculacion) {
                 cout << 1 << " ";
             } else {

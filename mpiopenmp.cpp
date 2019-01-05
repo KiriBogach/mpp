@@ -1,20 +1,12 @@
-/* Cabecera TODO
-
-c++11
-
-
-
-Esquema de un algoritmo genético:
-    Initial population
-    Fitness function
-    Selection
-    Crossover
-    Mutation
-
-
-*/
+/*******************************************************************************/
+/*********				   4º Ingenieria del Software				  **********/
+/*********	  			   Universidad Murcia - MPP       		  	  **********/
+/*********				   Alumno: Kyryl Bogach					  	  **********/
+/*********				   Profesor: Domingo Giménez Cánovas		  **********/
+/*******************************************************************************/
 
 #include <mpi.h>
+#include <omp.h>
 #include <sys/time.h>
 #include <time.h>
 #include <algorithm>
@@ -34,6 +26,9 @@ int na;            // Asignaturas
 int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
 /* DEFINICION DE VARIABLES DEL ALGORITMO */
+// Indica si la función fitness pondera con el máximo
+#define MEJORA_FITNESS 1
+
 // Nº iteraciones para buscar la mejor solución.
 #define GENERACIONES 1000
 int generaciones;
@@ -49,6 +44,9 @@ float p_cruce;
 // Probabilidad de mutación de genes
 #define P_MUT 0.1
 float p_mut;
+
+// Probabilidad de mutación de genes
+#define HILOS 2
 
 /* DEFINICION DE ESTRUCTURAS DE DATOS */
 
@@ -95,7 +93,10 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
     }
     desviacion /= na;
 
-    return desviacion + max;
+    if (MEJORA_FITNESS) {
+        desviacion += max;
+    }
+    return desviacion;
 }
 
 int maximaDiferencia(vector<int> v) {
@@ -137,6 +138,14 @@ void imprimirDatos() {
         }
         cout << endl;
     }
+}
+
+void imprimirCasoUso() {
+    cout << "Problema:" << endl;
+    cout << "\tnp:" << np << ", ng:" << ng << ", na:" << na << endl;
+    cout << "Genetico:" << endl;
+    cout << "\tgeneraciones:" << GENERACIONES << ", tam_poblacion:" << TAM_POBLACION << ", p_cruce:" << P_CRUCE << ", p_mut:" << P_MUT << endl
+         << endl;
 }
 
 void imprimirVector(vector<int> v, bool incremento = false) {
@@ -217,6 +226,8 @@ void imprimirMedirFitness(Poblacion &poblacion) {
     }
 }
 
+/* FUNCIONALIDAD INTRÍNSECA */
+
 void inicializarPoblacion(Poblacion &poblacion) {
     for (int i = 0; i < poblacion.individuos.size(); i++) {
         vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
@@ -226,8 +237,6 @@ void inicializarPoblacion(Poblacion &poblacion) {
         }
     }
 }
-
-/* FUNCIONALIDAD INTRÍNSECA */
 
 vector<int> resultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
@@ -357,36 +366,44 @@ void mutation(Poblacion &poblacion) {
     }
 }
 
-Individuo mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut) {
-    Poblacion poblacion;
+double mpiopenmp(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut,
+                 int nodo, int procesos, int iteraciones) {
+    vector<Poblacion> poblaciones;
+#pragma omp parallel shared(poblaciones) firstprivate(iteraciones) num_threads(2)
+    {
+        Poblacion poblacion;
 
-    inicializarPoblacion(poblacion);
-    medirFitness(poblacion);
-
-    for (int iteracion = 0; iteracion < generaciones; iteracion++) {
-        Poblacion nuevaPoblacion;
-        nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
-        poblacion = crossover(nuevaPoblacion);
-        mutation(poblacion);
+        inicializarPoblacion(poblacion);
         medirFitness(poblacion);
-        Individuo mejor = cogerMejor(poblacion);
-        if (mejor.fitness == 0.0) {
-            break;  // Encontramos la solución óptima
+
+        for (int iteracion = 0; iteracion < iteraciones; iteracion++) {
+            Poblacion nuevaPoblacion;
+            nuevaPoblacion.individuos = seleccionPorTorneo(poblacion);
+            poblacion = crossover(nuevaPoblacion);
+            mutation(poblacion);
+            medirFitness(poblacion);
+            Individuo mejor = cogerMejor(poblacion);
+            if (mejor.fitness == 0.0) {
+                break;  // Termina el hilo
+            }
         }
+
+        poblaciones.push_back(poblacion);
     }
 
-    Individuo mejor = cogerMejor(poblacion);
-    return mejor;
-}
+    vector<Individuo> mejores;
+    for (Poblacion p : poblaciones) {
+        Individuo mejor = cogerMejor(p);
+        mejores.push_back(mejor);
+    }
 
-Individuo construirIndividuo(int *asignaciones_recibido, double fitness_recibido) {
-    vector<int> asignaciones_recibido_vector(asignaciones_recibido, asignaciones_recibido + np);
+    /* Ordenamos por su fitness */
+    sort(mejores.begin(), mejores.end(), ordenacion);
+    Individuo mejor = mejores.at(0);
 
-    Individuo individuo_recibido;
-    individuo_recibido.fitness = fitness_recibido;
-    individuo_recibido.asignaciones = asignaciones_recibido_vector;
+    imprimirResultadoIndividuo(mejor);
 
-    return individuo_recibido;
+    return mejor.fitness;
 }
 
 int main(int argc, char *argv[]) {
@@ -400,11 +417,14 @@ int main(int argc, char *argv[]) {
     srand(time(NULL) + nodo);
 
     generaciones = GENERACIONES / procesos;
+    int iteracionesHilo = generaciones / HILOS;
 
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
-        cout << "Generaciones por proceso: " << generaciones << endl;
         leer();
+        imprimirCasoUso();
+        cout << "Generaciones por proceso: " << generaciones << endl;
+        cout << "Generaciones por proceso/hilo: " << iteracionesHilo << endl;
         int parametros[] = {np, ng, na};
         MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);
         MPI_Bcast(asignaturas, np * na, MPI_INT, ROOT, MPI_COMM_WORLD);
@@ -429,29 +449,22 @@ int main(int argc, char *argv[]) {
 
     /* Ejecución secuencial */
     ti = mseconds();
-    Individuo mi_mejor = mpi(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut);
+    double fitness = mpiopenmp(np, ng, na, asignaturas, generaciones, tam_poblacion, p_cruce, p_mut, nodo, procesos, iteracionesHilo);
     tf = mseconds();
 
     if (nodo != ROOT) {
-        MPI_Send(&mi_mejor.fitness, 1, MPI_DOUBLE, ROOT, 20, MPI_COMM_WORLD);
-        MPI_Send(&mi_mejor.asignaciones[0], np, MPI_INT, ROOT, 40, MPI_COMM_WORLD);
+        MPI_Send(&fitness, 1, MPI_DOUBLE, ROOT, 20, MPI_COMM_WORLD);
     } else {
-        Individuo &mejor_individuo = mi_mejor;
+        double mejor_fitness = fitness;
         for (int proceso = 1; proceso < procesos; proceso++) {
             double fitness_recibido;
-            int asignaciones_recibido[np];
-
             MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 20, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(&asignaciones_recibido, np, MPI_INT, proceso, 40, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            Individuo individuo_recibido = construirIndividuo(asignaciones_recibido, fitness_recibido);
-
-            if (individuo_recibido.fitness < mejor_individuo.fitness) {
-                mejor_individuo = individuo_recibido;
+            if (fitness_recibido < mejor_fitness) {
+                mejor_fitness = fitness_recibido;
             }
         }
-        cout << "Tiempo MPI: " << (tf - ti) / 1000.0 << " segundos" << endl;
-        cout << "Fitness obtenido: " << mejor_individuo.fitness << endl;
+        cout << "Tiempo OMP_MPI: " << (tf - ti) / 1000.0 << " segundos" << endl;
+        cout << "Fitness obtenido: " << mejor_fitness << endl;
     }
 
     MPI_Finalize();

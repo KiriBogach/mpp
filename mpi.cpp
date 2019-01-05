@@ -1,18 +1,9 @@
-/* Cabecera TODO
-
-c++11
-
-
-
-Esquema de un algoritmo genético:
-    Initial population
-    Fitness function
-    Selection
-    Crossover
-    Mutation
-
-
-*/
+/*******************************************************************************/
+/*********				   4º Ingenieria del Software				  **********/
+/*********	  			   Universidad Murcia - MPP       		  	  **********/
+/*********				   Alumno: Kyryl Bogach					  	  **********/
+/*********				   Profesor: Domingo Giménez Cánovas		  **********/
+/*******************************************************************************/
 
 #include <mpi.h>
 #include <sys/time.h>
@@ -34,6 +25,9 @@ int na;            // Asignaturas
 int *asignaturas;  // Las asignaturas cursadas por cada alumno
 
 /* DEFINICION DE VARIABLES DEL ALGORITMO */
+// Indica si la función fitness pondera con el máximo
+#define MEJORA_FITNESS 1
+
 // Nº iteraciones para buscar la mejor solución.
 #define GENERACIONES 1000
 int generaciones;
@@ -49,6 +43,9 @@ float p_cruce;
 // Probabilidad de mutación de genes
 #define P_MUT 0.1
 float p_mut;
+
+// El número de comunicaciones: GENERACIONES / GENERACIONES_COMUNICACION
+#define GENERACIONES_COMUNICACION 4
 
 /* DEFINICION DE ESTRUCTURAS DE DATOS */
 
@@ -95,7 +92,10 @@ double desviacionTipicaRespectoMedia(vector<int> &asignaciones) {
     }
     desviacion /= na;
 
-    return desviacion + max;
+    if (MEJORA_FITNESS) {
+        desviacion += max;
+    }
+    return desviacion;
 }
 
 int maximaDiferencia(vector<int> v) {
@@ -225,6 +225,8 @@ void imprimirMedirFitness(Poblacion &poblacion) {
     }
 }
 
+/* FUNCIONALIDAD INTRÍNSECA */
+
 void inicializarPoblacion(Poblacion &poblacion) {
     for (int i = 0; i < poblacion.individuos.size(); i++) {
         vector<int> &asignaciones = poblacion.individuos.at(i).asignaciones;
@@ -234,8 +236,6 @@ void inicializarPoblacion(Poblacion &poblacion) {
         }
     }
 }
-
-/* FUNCIONALIDAD INTRÍNSECA */
 
 vector<int> resultadoIndividuo(Individuo &individuo) {
     vector<vector<int>> subgrupos;  // todos los alumnos de cada asignatura de todos lo subgrupos
@@ -386,7 +386,8 @@ Individuo construirIndividuo(int *asignaciones_recibido, double fitness_recibido
     return individuo_recibido;
 }
 
-void comunicar(Poblacion poblacion, Individuo mi_mejor, int nodo, int procesos) {
+bool comunicar(Poblacion poblacion, Individuo mi_mejor, int nodo, int procesos) {
+    bool fitness_0 = mi_mejor.fitness == 0.0;
     vector<Individuo> individuos_recibidos;
     for (int proceso = 0; proceso < procesos; proceso++) {
         if (proceso == nodo) continue;
@@ -402,10 +403,19 @@ void comunicar(Poblacion poblacion, Individuo mi_mejor, int nodo, int procesos) 
         MPI_Recv(&fitness_recibido, 1, MPI_DOUBLE, proceso, 80, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&asignaciones_recibido, np, MPI_INT, proceso, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+        if (fitness_recibido == 0.0) {
+            fitness_0 = true;
+        }
+
         individuos_recibidos.push_back(construirIndividuo(asignaciones_recibido, fitness_recibido));
     }
 
     incluirIndividuos(poblacion, individuos_recibidos);
+    return fitness_0;
+}
+
+bool deboComunicar(int iteracion, int generaciones_comunicacion) {
+    return iteracion > 0 && iteracion % generaciones_comunicacion == 0;
 }
 
 double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_poblacion, double p_cruce, double p_mut,
@@ -415,10 +425,13 @@ double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_p
     inicializarPoblacion(poblacion);
     medirFitness(poblacion);
 
-    for (int iteracion = 0; iteracion < generaciones; iteracion++) {
-        if (iteracion % generaciones_comunicacion == 0) {
+    int iteracion;
+    for (iteracion = 0; iteracion < generaciones; iteracion++) {
+        if (deboComunicar(iteracion, generaciones_comunicacion)) {
             Individuo mejor = cogerMejor(poblacion);
-            comunicar(poblacion, mejor, nodo, procesos);
+            if (comunicar(poblacion, mejor, nodo, procesos)) {
+                return mejor.fitness;  // Algún proceso tiene la solución con fitness 0
+            }
         }
 
         Poblacion nuevaPoblacion;
@@ -433,7 +446,12 @@ double mpi(int np, int ng, int na, int *asignaturas, int generaciones, int tam_p
     }
 
     Individuo mejor = cogerMejor(poblacion);
-    //imprimirIndividuo(mejor);
+    for (; iteracion < generaciones; iteracion++) {
+        if (deboComunicar(iteracion, generaciones_comunicacion) && comunicar(poblacion, mejor, nodo, procesos)) {
+            break;  // Algún proceso tiene la solución con fitness 0
+        }
+    }
+
     return mejor.fitness;
 }
 
@@ -448,7 +466,7 @@ int main(int argc, char *argv[]) {
     srand(time(NULL) + nodo);
 
     generaciones = GENERACIONES / procesos;
-    int generaciones_comunicacion = generaciones / 4;
+    int generaciones_comunicacion = generaciones / GENERACIONES_COMUNICACION;
 
     /* Parámetros del algoritmo genético */
     tam_poblacion = TAM_POBLACION;

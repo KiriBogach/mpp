@@ -1,8 +1,8 @@
-all: secuencial.cpp omp.cpp mpi.cpp omp_mpi.cpp
+all: secuencial.cpp omp.cpp mpi.cpp mpiopenmp.cpp
 	g++ -std=c++11 secuencial.cpp -o secuencial.out
 	g++ -std=c++11 omp.cpp -o omp.out -fopenmp
 	mpic++ -std=c++11 mpi.cpp -o mpi.out
-	mpic++ -w -std=c++11 omp_mpi.cpp -o omp_mpi.out -fopenmp
+	mpic++ -w -std=c++11 mpiopenmp.cpp -o mpiopenmp.out -fopenmp
 
 secuencial: secuencial.cpp
 	g++ -std=c++11 secuencial.cpp -o secuencial.out
@@ -13,17 +13,20 @@ omp: omp.cpp
 mpi: mpi.cpp
 	mpic++ -w -std=c++11 mpi.cpp -o mpi.out
 
-omp_mpi: omp_mpi.cpp
-	mpic++ -w -std=c++11 omp_mpi.cpp -o omp_mpi.out -fopenmp
+mpiopenmp: mpiopenmp.cpp
+	mpic++ -w -std=c++11 mpiopenmp.cpp -o mpiopenmp.out -fopenmp
 
 generador: generador.cpp
 	g++ -std=c++11 generador.cpp -o generador.out
 
-generar: all generador
-	./generador.out $(np) $(ng) $(na) $(p_matriculacion) > temp.txt
-	/usr/bin/time --format "%E" -a ./secuencial.out < temp.txt
-	/usr/bin/time --format "%E" -a ./omp.out < temp.txt
-	rm temp.txt
+generador_perfecto: generador_perfecto.cpp
+	g++ -std=c++11 generador_perfecto.cpp -o generador_perfecto.out
+
+generar: generador
+	./generador.out $(np) $(ng) $(na) $(p_matriculacion) > generado.txt
+
+generar_perfecto: generador_perfecto
+	./generador_perfecto.out $(np) $(ng) $(na) > generado_perfecto.txt
 
 run_secuencial: secuencial
 	./secuencial.out < $(file)
@@ -37,11 +40,11 @@ run_mpi: mpi
 	mpirun -np $(np) mpi.out < $(file)
 	@echo -e
 
-run_omp_mpi: omp_mpi
-	mpirun -np $(np) omp_mpi.out < $(file)
+run_mpiopenmp: mpiopenmp
+	mpirun -np $(np) mpiopenmp.out < $(file)
 	@echo -e
 	
-benchmark: run_secuencial run_omp run_mpi run_omp_mpi
+benchmark: run_secuencial run_omp run_mpi run_mpiopenmp
 
 clean:
 	rm *.out
