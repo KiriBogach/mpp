@@ -476,7 +476,7 @@ int main(int argc, char *argv[]) {
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
         leer();
-        imprimirCasoUso();
+        //imprimirCasoUso();
         cout << "Generaciones por proceso: " << generaciones << endl;
         int parametros[] = {np, ng, na};
         MPI_Bcast(parametros, 3, MPI_INT, ROOT, MPI_COMM_WORLD);

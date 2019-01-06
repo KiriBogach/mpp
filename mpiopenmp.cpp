@@ -401,8 +401,6 @@ double mpiopenmp(int np, int ng, int na, int *asignaturas, int generaciones, int
     sort(mejores.begin(), mejores.end(), ordenacion);
     Individuo mejor = mejores.at(0);
 
-    imprimirResultadoIndividuo(mejor);
-
     return mejor.fitness;
 }
 
@@ -422,7 +420,7 @@ int main(int argc, char *argv[]) {
     /* Lectura y compartición de datos */
     if (nodo == ROOT) {
         leer();
-        imprimirCasoUso();
+        //imprimirCasoUso();
         cout << "Generaciones por proceso: " << generaciones << endl;
         cout << "Generaciones por proceso/hilo: " << iteracionesHilo << endl;
         int parametros[] = {np, ng, na};

@@ -406,7 +406,7 @@ int main(int argc, char *argv[]) {
     p_cruce = P_CRUCE;
     p_mut = P_MUT;
 
-    imprimirCasoUso();
+    //imprimirCasoUso();
 
     /* Tiempos de ejecución */
     long long ti, tf;

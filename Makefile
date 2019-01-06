@@ -41,7 +41,7 @@ run_mpi: mpi
 	@echo -e
 
 run_mpiopenmp: mpiopenmp
-	mpirun -np $(np) mpiopenmp.out < $(file)
+	mpirun -np $(np_hibrido) mpiopenmp.out < $(file)
 	@echo -e
 	
 benchmark: run_secuencial run_omp run_mpi run_mpiopenmp
