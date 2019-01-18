@@ -7,8 +7,7 @@ Se prentende hacer una solución en C++ con un algoritmo genético.
 
 Veamos qué sale...
 
-Versión día 24/09/2018
-![alt text](http://kiribogach.es/archivos/mpp_24_09_2018.png)
-
-Versión día 01/10/2018
-![alt text](http://kiribogach.es/archivos/mpp_01_10_2018.png)
+Entregado el día 18/01/2019.
+Adjuntada la documentación.
+Bastante chula la práctica y creo que ha funciona muy bien el algoritmo propuesto e implementado.
+Paralelización de grano grueso eficaz y eficiente.
